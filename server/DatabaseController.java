@@ -11,9 +11,9 @@ import java.net.Socket;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class DatabaseController {
-    ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public void requestHandler(Socket socket) throws Exception {
+    static void requestHandler(Socket socket) throws Exception {
         DataInputStream input = new DataInputStream(socket.getInputStream());
         DataOutputStream output  = new DataOutputStream(socket.getOutputStream());
 
@@ -31,7 +31,7 @@ public class DatabaseController {
         }
     }
 
-    public Response executeCommand(Request request) {
+    public static Response executeCommand(Request request) {
         Response response;
         switch (request.getType()) {
             case "exit":

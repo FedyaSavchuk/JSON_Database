@@ -21,7 +21,7 @@ public class Main {
             Socket socket = server.accept();
             new Thread(() -> {
                 try {
-                    new DatabaseController().requestHandler(socket);
+                    DatabaseController.requestHandler(socket);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
