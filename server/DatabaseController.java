@@ -11,9 +11,9 @@ import java.net.Socket;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class DatabaseController {
-    static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    static void requestHandler(Socket socket) throws Exception {
+    public void requestHandler(Socket socket) throws Exception {
         DataInputStream input = new DataInputStream(socket.getInputStream());
         DataOutputStream output  = new DataOutputStream(socket.getOutputStream());
 
@@ -31,28 +31,28 @@ public class DatabaseController {
         }
     }
 
-    public static Response executeCommand(Request request) {
+    public Response executeCommand(Request request) {
         Response response;
         switch (request.getType()) {
             case "exit":
                 return new Response("OK");
             case "get":
                 lock.readLock().lock();
-                response = DatabaseService.get(request.getKey());
+                response = new DatabaseService().executor(request.getKey(), request.getValue(), request.getType());
                 lock.readLock().unlock();
                 return response;
             case "set":
                 lock.writeLock().lock();
-                response = DatabaseService.set(request.getKey(), request.getValue());
+                response = new DatabaseService().executor(request.getKey(), request.getValue(), request.getType());;
                 lock.writeLock().unlock();
                 return response;
             case "delete":
                 lock.writeLock().lock();
-                response = DatabaseService.delete(request.getKey());
+                response = new DatabaseService().executor(request.getKey(), request.getValue(), request.getType());
                 lock.writeLock().unlock();
                 return response;
             default:
-                return DatabaseService.error();
+                return new DatabaseService().error();
         }
     }
 }

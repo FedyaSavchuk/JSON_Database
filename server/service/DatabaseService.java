@@ -3,6 +3,7 @@ package server.service;
 import com.google.gson.*;
 import server.model.BadResponse;
 import server.model.Response;
+import server.properties.Options;
 
 import java.io.Reader;
 import java.io.Writer;
@@ -11,130 +12,102 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 
 public class DatabaseService {
-    static Gson gson = new Gson();
+    int elemIndex;
+    String[] keys;
+    JsonArray jsonArray = new JsonArray();
+    Gson gson = new Gson();
 
-    public static Response get(String key) {
-        try (Reader reader = Files.newBufferedReader(Paths.get("/Users/fedyasavchuk/projects/JSON Database/JSON Database/task/src/server/data/db.json"))) {
+    public Response executor(String key, JsonElement value, String requestType) {
+        try (Reader reader = Files.newBufferedReader(Paths.get(Options.DATABASE_PATH))) {
+            JsonElement element = gson.fromJson(reader, JsonElement.class);
+            if (!key.startsWith("[")) { key = "[" + key + "]"; }
+            if (element.isJsonArray()) {
+                jsonArray = element.getAsJsonArray();
+            } else {
+                jsonArray.add(element);
+            }
+            keys = gson.fromJson(key, String[].class);
+            elemIndex = findIndex(keys[0]);
 
-            JsonArray jsonArray = gson.fromJson(reader, JsonArray.class);
-            String[] keys = gson.fromJson(key, String[].class);
+            Response response;
+            switch (requestType) {
+                case "get":
+                    return get();
+                case "set":
+                    response = set(key, value);
+                    break;
+                case "delete":
+                    response = delete();
+                    break;
+                default:
+                    return error();
+            }
 
-            int elemIndex = findIndex(jsonArray, keys[0]);
-            if (elemIndex == -1) { return error(); }
-
-            JsonElement jsonElement = findElement(jsonArray.get(elemIndex).getAsJsonObject().get("value"), keys);
-            if (jsonElement == null) { return error(); }
-
-            return new Response("OK", jsonElement);
+            Writer writer = Files.newBufferedWriter(Paths.get(Options.DATABASE_PATH));
+            gson.toJson(jsonArray, writer);
+            writer.close();
+            return response;
         } catch (Exception e) {
-            System.out.println("Problem with db file (GET request)");
+            System.out.println("Problem with db file");
+            return error();
         }
-        return error();
     }
 
-    public static JsonObject addProperty(String key, JsonElement value) {
+    Response get() {
+        if (elemIndex == -1) { return error(); }
+        JsonElement jsonElement = findElement(jsonArray.get(elemIndex).getAsJsonObject().get("value"), keys);
+        if (jsonElement == null) { return error(); }
+        return new Response("OK", jsonElement);
+    }
+
+    JsonObject addProperty(String key, JsonElement value) {
         JsonObject jo = new JsonObject();
         jo.add("key", gson.fromJson(key, JsonElement.class));
         jo.add("value", value);
         return jo;
     }
 
-    public static Response set(String key, JsonElement value) {
-        try {
-            Reader reader = Files.newBufferedReader(Paths.get("/Users/fedyasavchuk/projects/JSON Database/JSON Database/task/src/server/data/db.json"));
-            JsonArray jsonArray;
-            reader.mark(1);
-            if (reader.read() != '[') {
-                reader.reset();
-                jsonArray = new JsonArray();
-                jsonArray.add(addProperty(key, value));
-                Writer writer = Files.newBufferedWriter(Paths.get("/Users/fedyasavchuk/projects/JSON Database/JSON Database/task/src/server/data/db.json"));
-                gson.toJson(jsonArray, writer);
-                writer.close();
-                return new Response("OK");
-            } else {
-                reader.reset();
-                jsonArray = gson.fromJson(reader, JsonArray.class);
-            }
-
-
-
-            if (!key.startsWith("[")) {
-                int elemIndex = findIndex(jsonArray, key);
-                if (elemIndex == -1) {
-                    jsonArray.add(addProperty(key, value));
-                } else {
-                    jsonArray.get(0).getAsJsonObject().add("value", value);
-                }
-                Writer writer = Files.newBufferedWriter(Paths.get("/Users/fedyasavchuk/projects/JSON Database/JSON Database/task/src/server/data/db.json"));
-                gson.toJson(jsonArray, writer);
-                writer.close();
-                return new Response("OK");
-            }
-
-            String[] keys = gson.fromJson(key, String[].class);
-            int elemIndex = findIndex(jsonArray, keys[0]);
+    Response set(String key, JsonElement value) {
+        if (elemIndex == -1) {
+            jsonArray.add(addProperty(key, value));
+        } else if (keys.length == 1) {
+            jsonArray.get(elemIndex).getAsJsonObject().add("value", value);
+        } else {
             String lastKey = keys[keys.length - 1];
             keys = Arrays.copyOf(keys, keys.length-1);
+            JsonElement jsonElement = findElement(jsonArray.get(elemIndex).getAsJsonObject().get("value"), keys);
+            if (jsonElement == null) { return error(); }
+            jsonElement.getAsJsonObject().add(lastKey, value);
+        }
 
+        return new Response("OK");
+    }
+
+    Response delete() {
+        if (elemIndex == -1) { return error(); }
+
+        if (keys.length == 1) {
+            jsonArray.remove(elemIndex);
+        } else {
+            String lastKey = keys[keys.length - 1];
+            keys = Arrays.copyOf(keys, keys.length-1);
             JsonElement jsonElement = findElement(jsonArray.get(elemIndex).getAsJsonObject().get("value"), keys);
             if (jsonElement == null) { return error(); }
 
-            jsonElement.getAsJsonObject().add(lastKey, value);
-            Writer writer = Files.newBufferedWriter(Paths.get("/Users/fedyasavchuk/projects/JSON Database/JSON Database/task/src/server/data/db.json"));
-            gson.toJson(jsonArray, writer);
-            writer.close();
-
-            return new Response("OK");
-        } catch (Exception e) {
-            System.out.println("Problem with db file (SET request)");
+            jsonElement.getAsJsonObject().remove(lastKey);
         }
-        return error();
+        return new Response("OK");
     }
 
-    public static Response delete(String key) {
-        try (Reader reader = Files.newBufferedReader(Paths.get("/Users/fedyasavchuk/projects/JSON Database/JSON Database/task/src/server/data/db.json"))) {
-            JsonArray jsonArray = gson.fromJson(reader, JsonArray.class);
-            int elemIndex;
-
-            if (!key.startsWith("[")) {
-                elemIndex = findIndex(jsonArray, key);
-                if (elemIndex == -1) { return error(); }
-            }
-
-            String[] keys = gson.fromJson(key, String[].class);
-            elemIndex = findIndex(jsonArray, keys[0]);
-            if (elemIndex == -1) { return error(); }
-
-            if (keys.length == 1) {
-                jsonArray.remove(elemIndex);
-            } else {
-                String lastKey = keys[keys.length - 1];
-                keys = Arrays.copyOf(keys, keys.length-1);
-                JsonElement jsonElement = findElement(jsonArray.get(elemIndex).getAsJsonObject().get("value"), keys);
-                if (jsonElement == null) { return error(); }
-                jsonElement.getAsJsonObject().remove(lastKey);
-            }
-
-
-
-            reader.close();
-            Writer writer = Files.newBufferedWriter(Paths.get("/Users/fedyasavchuk/projects/JSON Database/JSON Database/task/src/server/data/db.json"));
-            gson.toJson(jsonArray, writer);
-            writer.close();
-
-            return new Response("OK");
-        } catch (Exception e) {
-            System.out.println("Problem with db file (DELETE request)");
-        }
-        return error();
-    }
-
-    public static BadResponse error() {
+    public BadResponse error() {
         return new BadResponse("ERROR");
     }
 
-    public static int findIndex(JsonArray jsonArray, String targetKey) {
+    int findIndex(String targetKey) {
+        if (jsonArray == null) {
+            jsonArray = new JsonArray();
+            return -1;
+        }
         for (int i = 0; i < jsonArray.size(); i++) {
             if (jsonArray.get(i).isJsonObject()
                     && jsonArray.get(i).getAsJsonObject().get("key").getAsString().equals(targetKey)) {
@@ -144,7 +117,7 @@ public class DatabaseService {
         return -1;
     }
 
-    public static JsonElement findElement(JsonElement jsonElement, String[] keys) {
+    JsonElement findElement(JsonElement jsonElement, String[] keys) {
         for (int i = 1; i < keys.length; i++) {
             if (jsonElement.isJsonObject() && jsonElement.getAsJsonObject().has(keys[i])) {
                 jsonElement = jsonElement.getAsJsonObject().get(keys[i]);
